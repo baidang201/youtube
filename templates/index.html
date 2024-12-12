@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- 标题部分 -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">YouTube Video Downloader</h1>
+            <p class="text-gray-600">Download your favorite YouTube videos easily</p>
+        </div>
+
+        <!-- 下载表单 -->
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex gap-4">
+                <input type="text" 
+                       id="videoUrl" 
+                       placeholder="Enter YouTube URL" 
+                       class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="downloadVideo()" 
+                        class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    Download
+                </button>
+            </div>
+            <div id="downloadProgress" class="hidden mt-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <p class="text-sm text-gray-600 mt-2">Downloading... <span id="progressText">0%</span></p>
+            </div>
+        </div>
+
+        <!-- 视频列表 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for video in videos %}
+            <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                <video class="w-full h-48 object-cover" controls>
+                    <source src="/downloads/{{ video.title }}.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="p-4">
+                    <h3 class="font-semibold text-lg mb-2">{{ video.title }}</h3>
+                    <p class="text-sm text-gray-600 mb-1">Author: {{ video.author }}</p>
+                    <p class="text-sm text-gray-600 mb-1">Duration: {{ video.duration }} seconds</p>
+                    <p class="text-sm text-gray-600 mb-1">Size: {{ video.file_size // 1024 // 1024 }} MB</p>
+                    <p class="text-sm text-gray-600 truncate">Path: {{ video.local_path }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        async function downloadVideo() {
+            const url = document.getElementById('videoUrl').value;
+            if (!url) {
+                alert('Please enter a YouTube URL');
+                return;
+            }
+
+            // 显示进度条
+            const progressBar = document.getElementById('downloadProgress');
+            const progressDiv = progressBar.querySelector('div > div');
+            const progressText = document.getElementById('progressText');
+            progressBar.classList.remove('hidden');
+
+            try {
+                // 开始下载
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                });
+                
+                if (!response.ok) throw new Error('Download failed');
+                
+                const {task_id} = await response.json();
+                
+                // 轮询下载状态
+                const checkStatus = async () => {
+                    const statusResponse = await fetch(`/status/${task_id}`);
+                    const status = await statusResponse.json();
+                    
+                    progressDiv.style.width = `${status.progress}%`;
+                    progressText.textContent = `${Math.round(status.progress)}%`;
+
+                    if (status.status === 'completed') {
+                        setTimeout(() => {
+                            progressBar.classList.add('hidden');
+                            window.location.reload();
+                        }, 1000);
+                    } else if (status.status === 'failed') {
+                        alert(`Download failed: ${status.error}`);
+                        progressBar.classList.add('hidden');
+                    } else {
+                        setTimeout(checkStatus, 1000);
+                    }
+                };
+
+                checkStatus();
+            } catch (error) {
+                alert('Error: ' + error.message);
+                progressBar.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html> 
